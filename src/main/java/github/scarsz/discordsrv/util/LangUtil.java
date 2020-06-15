@@ -494,7 +494,7 @@ public class LangUtil {
             put(Language.ET, "Gruppide sünkroonimiseks vajalikku rolli ID-d {rolename} ei leitud. Kas bot on serveris?");
             put(Language.ZH, "未能找到身分組 {rolename} 來進行群組同步。 請確認Bot是否有在伺服器中。");
         }}), UNKNOWN_CODE(new HashMap<Language, String>() {{
-            put(Language.EN, "I don't know of such a code, try again.");
+            put(Language.EN, "");
             put(Language.FR, "Je ne connais pas un tel code, réessayez");
             put(Language.DE, "Diesen Code kenne ich nicht, bitte versuche es erneut.");
             put(Language.JA, "そのようなコードは知りません。もう一度やり直してください。");
@@ -505,7 +505,7 @@ public class LangUtil {
             put(Language.ET, "Ma ei tea sellist koodi, proovi uuesti.");
             put(Language.ZH, "驗證碼無法識別， 請重試。");
         }}), INVALID_CODE(new HashMap<Language, String>() {{
-            put(Language.EN, "Are you sure that's your code? Link codes are 4 numbers long.");
+            put(Language.EN, "");
             put(Language.FR, "Êtes vous sûr qu'il s'agit du bon code ? Les codes possèdent quatre chiffres.");
             put(Language.DE, "Bist du sicher, dass dies dein Code ist? Link-Codes bestehen aus 4 Zahlen.");
             put(Language.JA, "それがあなたのコードで正しいですか？リンクコードは4文字の数字です。");
