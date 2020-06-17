@@ -70,6 +70,8 @@ public class WebhookUtil {
     public static void deliverMessage(TextChannel channel, Player player, String message, MessageEmbed embed) {
         Bukkit.getScheduler().runTaskAsynchronously(DiscordSRV.getPlugin(), () -> {
             String avatarUrl = DiscordSRV.config().getString("Experiment_EmbedAvatarUrl");
+            avatarUrl = PlaceholderUtil.replacePlaceholders(avatarUrl, player);
+
             String username = DiscordSRV.config().getString("Experiment_WebhookChatMessageUsernameFormat")
                     .replace("%displayname%", DiscordUtil.strip(player.getDisplayName()))
                     .replace("%username%", player.getName());
@@ -89,6 +91,7 @@ public class WebhookUtil {
 
             if (StringUtils.isBlank(avatarUrl)) avatarUrl = "https://minotar.net/helm/{uuid-nodashes}/{size}";
             avatarUrl = avatarUrl
+                    .replace("{timestamp}", String.valueOf(System.currentTimeMillis() / 1000))
                     .replace("{username}", player.getName())
                     .replace("{uuid}", player.getUniqueId().toString())
                     .replace("{uuid-nodashes}", player.getUniqueId().toString().replace("-", ""))

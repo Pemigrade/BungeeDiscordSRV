@@ -79,6 +79,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
@@ -249,6 +250,9 @@ public class DiscordSRV extends JavaPlugin implements Listener {
 
         getPlugin().getLogger().info("[DEBUG] " + message + (DiscordSRV.config().getInt("DebugLevel") >= 2 ? "\n" + DebugUtil.getStackTrace() : ""));
     }
+    public static void debug(Collection<String> message) {
+        message.forEach(DiscordSRV::debug);
+    }
 
     @SuppressWarnings("unchecked")
     public DiscordSRV() {
@@ -321,6 +325,13 @@ public class DiscordSRV extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        if (++DebugUtil.initializationCount > 1) {
+            DiscordSRV.error(ChatColor.RED + LangUtil.InternalMessage.PLUGIN_RELOADED.toString());
+            PlayerUtil.getOnlinePlayers().stream()
+                    .filter(player -> player.hasPermission("discordsrv.admin"))
+                    .forEach(player -> player.sendMessage(ChatColor.RED + LangUtil.InternalMessage.PLUGIN_RELOADED.toString()));
+        }
+
         ConfigUtil.migrate();
         ConfigUtil.logMissingOptions();
         DiscordSRV.debug("Language is " + config.getLanguage().getName());
@@ -356,10 +367,12 @@ public class DiscordSRV extends JavaPlugin implements Listener {
                 final ThreadFactory gatewayThreadFactory = new ThreadFactoryBuilder().setNameFormat("DiscordSRV - Update Checker").build();
                 updateChecker = Executors.newScheduledThreadPool(1);
             }
-            updateChecker.scheduleAtFixedRate(() -> {
-                DiscordSRV.updateIsAvailable = UpdateUtil.checkForUpdates();
-                DiscordSRV.updateChecked = true;
-            }, 0, 6, TimeUnit.HOURS);
+            DiscordSRV.updateIsAvailable = UpdateUtil.checkForUpdates();
+            DiscordSRV.updateChecked = true;
+            updateChecker.scheduleAtFixedRate(() ->
+                    DiscordSRV.updateIsAvailable = UpdateUtil.checkForUpdates(false),
+                    6, 6, TimeUnit.HOURS
+            );
         }
 
         // shutdown previously existing jda if plugin gets reloaded
@@ -755,34 +768,38 @@ public class DiscordSRV extends JavaPlugin implements Listener {
         }
 
         // plugin hooks
-        for (Class<? extends PluginHook> hookClass : Arrays.asList(
+        for (String hookClassName : Arrays.asList(
                 // chat plugins
-                github.scarsz.discordsrv.hooks.chat.FancyChatHook.class,
-                github.scarsz.discordsrv.hooks.chat.HerochatHook.class,
-                github.scarsz.discordsrv.hooks.chat.LegendChatHook.class,
-                github.scarsz.discordsrv.hooks.chat.LunaChatHook.class,
-                github.scarsz.discordsrv.hooks.chat.TownyChatHook.class,
-                github.scarsz.discordsrv.hooks.chat.UltimateChatHook.class,
-                github.scarsz.discordsrv.hooks.chat.VentureChatHook.class,
+                "github.scarsz.discordsrv.hooks.chat.FancyChatHook",
+                "github.scarsz.discordsrv.hooks.chat.HerochatHook",
+                "github.scarsz.discordsrv.hooks.chat.LegendChatHook",
+                "github.scarsz.discordsrv.hooks.chat.LunaChatHook",
+                "github.scarsz.discordsrv.hooks.chat.TownyChatHook",
+                "github.scarsz.discordsrv.hooks.chat.UltimateChatHook",
+                "github.scarsz.discordsrv.hooks.chat.VentureChatHook",
                 // vanish plugins
-                github.scarsz.discordsrv.hooks.vanish.EssentialsHook.class,
-                github.scarsz.discordsrv.hooks.vanish.PhantomAdminHook.class,
-                github.scarsz.discordsrv.hooks.vanish.SuperVanishHook.class,
-                github.scarsz.discordsrv.hooks.vanish.VanishNoPacketHook.class,
+                "github.scarsz.discordsrv.hooks.vanish.EssentialsHook",
+                "github.scarsz.discordsrv.hooks.vanish.PhantomAdminHook",
+                "github.scarsz.discordsrv.hooks.vanish.SuperVanishHook",
+                "github.scarsz.discordsrv.hooks.vanish.VanishNoPacketHook",
                 // dynmap
-                github.scarsz.discordsrv.hooks.DynmapHook.class
+                "github.scarsz.discordsrv.hooks.DynmapHook",
+                // luckperms
+                "github.scarsz.discordsrv.hooks.permissions.LuckPermsHook"
         )) {
             try {
-                PluginHook pluginHook = hookClass.getDeclaredConstructor().newInstance();
+                Class<?> hookClass = Class.forName(hookClassName);
+
+                PluginHook pluginHook = (PluginHook) hookClass.getDeclaredConstructor().newInstance();
                 if (pluginHook.isEnabled()) {
                     DiscordSRV.info(LangUtil.InternalMessage.PLUGIN_HOOK_ENABLING.toString().replace("{plugin}", pluginHook.getPlugin().getName()));
                     Bukkit.getPluginManager().registerEvents(pluginHook, this);
                     pluginHooks.add(pluginHook);
                 }
-            } catch (Exception e) {
-                // ignore class not found exceptions
-                if (!(e instanceof ClassNotFoundException)) {
-                    DiscordSRV.error("Failed to load " + hookClass.getSimpleName() + ": " + e.getMessage());
+            } catch (Throwable e) {
+                // ignore class not found errors
+                if (!(e instanceof ClassNotFoundException) && !(e instanceof NoClassDefFoundError)) {
+                    DiscordSRV.error("Failed to load " + hookClassName + ": " + e.getMessage());
                     e.printStackTrace();
                 }
             }
@@ -868,9 +885,6 @@ public class DiscordSRV extends JavaPlugin implements Listener {
                     cycleTime,
                     cycleTime
             );
-            if (PluginUtil.pluginHookIsEnabled("LuckPerms")) {
-                Bukkit.getPluginManager().registerEvents(new github.scarsz.discordsrv.hooks.permissions.LuckPermsHook(), this);
-            }
         }
 
         voiceModule = new VoiceModule();
@@ -890,7 +904,6 @@ public class DiscordSRV extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         final long shutdownStartTime = System.currentTimeMillis();
-        DebugUtil.disabledOnce = true;
         final ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("DiscordSRV - Shutdown").build();
         final ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
         try {
@@ -915,6 +928,12 @@ public class DiscordSRV extends JavaPlugin implements Listener {
                                     .replace("%totalplayers%", totalPlayers)
                     );
                 }
+
+                // we're no longer ready
+                isReady = false;
+
+                // shutdown scheduler tasks
+                Bukkit.getScheduler().cancelTasks(this);
 
                 // shut down voice module
                 if (voiceModule != null) voiceModule.shutdown();
@@ -1009,7 +1028,8 @@ public class DiscordSRV extends JavaPlugin implements Listener {
                             shutdownTask.complete(null);
                         }
                     });
-                    jda.shutdown();
+                    jda.shutdownNow();
+                    jda = null;
                     try {
                         shutdownTask.get(5, TimeUnit.SECONDS);
                     } catch (TimeoutException e) {
@@ -1271,7 +1291,7 @@ public class DiscordSRV extends JavaPlugin implements Listener {
 
         MessageFormat messageFormat = new MessageFormat();
 
-        if (config().getOptional(key + ".Embed").isPresent()) {
+        if (config().getOptional(key + ".Embed").isPresent() && config().getOptionalBoolean(key + ".Embed.Enabled").orElse(true)) {
             Optional<String> hexColor = config().getOptionalString(key + ".Embed.Color");
             if (hexColor.isPresent()) {
                 String hex = hexColor.get().trim();
@@ -1351,15 +1371,12 @@ public class DiscordSRV extends JavaPlugin implements Listener {
             }
         }
 
-        if (config().getOptional(key + ".Webhook").isPresent()) {
-            Optional<Boolean> webhookEnabled = config().getOptionalBoolean(key + ".Webhook.Enable");
-            if (webhookEnabled.isPresent() && webhookEnabled.get()) {
-                messageFormat.setUseWebhooks(true);
-                config.getOptionalString(key + ".Webhook.AvatarUrl")
-                        .filter(StringUtils::isNotBlank).ifPresent(messageFormat::setWebhookAvatarUrl);
-                config.getOptionalString(key + ".Webhook.Name")
-                        .filter(StringUtils::isNotBlank).ifPresent(messageFormat::setWebhookName);
-            }
+        if (config().getOptional(key + ".Webhook").isPresent() && config().getOptionalBoolean(key + ".Webhook.Enable").orElse(false)) {
+            messageFormat.setUseWebhooks(true);
+            config.getOptionalString(key + ".Webhook.AvatarUrl")
+                    .filter(StringUtils::isNotBlank).ifPresent(messageFormat::setWebhookAvatarUrl);
+            config.getOptionalString(key + ".Webhook.Name")
+                    .filter(StringUtils::isNotBlank).ifPresent(messageFormat::setWebhookName);
         }
 
         Optional<String> content = config().getOptionalString(key + ".Content");
@@ -1416,10 +1433,12 @@ public class DiscordSRV extends JavaPlugin implements Listener {
 
         if (StringUtils.isBlank(avatarUrl)) avatarUrl = "https://minotar.net/helm/{uuid-nodashes}/{size}";
         avatarUrl = avatarUrl
+                .replace("{timestamp}", String.valueOf(System.currentTimeMillis() / 1000))
                 .replace("{username}", playerUsername)
-                .replace("{uuid}", playerUniqueId.toString())
-                .replace("{uuid-nodashes}", playerUniqueId.toString().replace("-", ""))
+                .replace("{uuid}", playerUniqueId != null ? playerUniqueId.toString() : "")
+                .replace("{uuid-nodashes}", playerUniqueId != null ? playerUniqueId.toString().replace("-", "") : "")
                 .replace("{size}", "128");
+        avatarUrl = PlaceholderUtil.replacePlaceholders(avatarUrl, playerUniqueId != null ? Bukkit.getPlayer(playerUniqueId) : null);
 
         return avatarUrl;
     }
